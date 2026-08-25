@@ -1,6 +1,10 @@
+from collections.abc import Awaitable, Callable
+
 from mcp.server.fastmcp import FastMCP
 
-from .ssh import q, run_ssh, run_many, validate_name
+from .utils import clamp, q, validate_name
+
+Runner = Callable[[str, int], Awaitable[str]]
 
 ALLOWED_EXEC = {
     "pwd": "pwd",
@@ -14,7 +18,19 @@ ALLOWED_EXEC = {
 }
 
 
-def register(mcp: FastMCP) -> None:
+async def _run_many(
+    run: Runner,
+    commands: list[tuple[str, str]],
+    timeout: int = 90,
+) -> str:
+    parts = []
+    for title, command in commands:
+        parts.append(f"===== {title} =====")
+        parts.append(await run(command, timeout))
+    return "\n".join(parts)
+
+
+def register(mcp: FastMCP, run: Runner) -> None:
     @mcp.tool()
     async def system_info() -> str:
         """Show VPS uptime, OS, CPU, memory, swap, load and kernel information."""
@@ -38,7 +54,7 @@ free -h
 printf '%s\n' '=== SWAP ==='
 swapon --show
 """
-        return await run_ssh(command)
+        return await run(command, 60)
 
     @mcp.tool()
     async def disk_usage() -> str:
@@ -49,15 +65,16 @@ df -hT
 printf '%s\n' '=== INODES ==='
 df -ih
 """
-        return await run_ssh(command)
+        return await run(command, 60)
 
     @mcp.tool()
     async def top_processes(limit: int = 15) -> str:
         """Show processes consuming the most CPU and memory."""
-        limit = max(5, min(int(limit), 50))
-        return await run_ssh(
+        n = clamp(limit, 5, 50)
+        return await run(
             f"ps -eo pid,ppid,user,%cpu,%mem,rss,stat,etime,comm "
-            f"--sort=-%cpu | head -n {limit + 1}"
+            f"--sort=-%cpu | head -n {n + 1}",
+            60,
         )
 
     @mcp.tool()
@@ -72,25 +89,21 @@ ip route 2>/dev/null
 printf '%s\n' '=== LISTENING PORTS ==='
 ss -lntup 2>/dev/null || ss -lnt
 """
-        return await run_ssh(command)
+        return await run(command, 60)
 
     @mcp.tool()
     async def systemd_failed() -> str:
         """Show failed systemd services."""
-        return await run_ssh(
-            "systemctl --failed --no-pager 2>/dev/null || true"
-        )
+        return await run("systemctl --failed --no-pager 2>/dev/null || true", 60)
 
     @mcp.tool()
     async def journal_errors(hours: int = 6, lines: int = 100) -> str:
         """Show recent system journal errors."""
-        hours = max(1, min(int(hours), 72))
-        lines = max(10, min(int(lines), 500))
-        return await run_ssh(
+        return await run(
             "journalctl --since "
-            + q(f"{hours} hours ago")
-            + f" -p err..alert -n {lines} --no-pager 2>/dev/null || true",
-            timeout=90,
+            + q(f"{clamp(hours, 1, 72)} hours ago")
+            + f" -p err..alert -n {clamp(lines, 10, 500)} --no-pager 2>/dev/null || true",
+            90,
         )
 
     @mcp.tool()
@@ -105,7 +118,7 @@ ss -lntup 2>/dev/null || ss -lnt
             ("DOCKER CONTAINERS", "docker ps -a --format 'table {{.Names}}\\t{{.Status}}\\t{{.Image}}'"),
             ("DOCKER DISK", "docker system df"),
         ]
-        return await run_many(commands, timeout=120)
+        return await _run_many(run, commands, timeout=120)
 
     @mcp.tool()
     async def diagnostic_command(command: str) -> str:
@@ -113,4 +126,4 @@ ss -lntup 2>/dev/null || ss -lnt
         if command not in ALLOWED_EXEC:
             allowed = ", ".join(sorted(ALLOWED_EXEC))
             raise ValueError(f"Command not allowed. Available: {allowed}")
-        return await run_ssh(ALLOWED_EXEC[command], timeout=90)
+        return await run(ALLOWED_EXEC[command], 90)

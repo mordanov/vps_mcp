@@ -1,19 +1,27 @@
+from collections.abc import Awaitable, Callable
+
 from mcp.server.fastmcp import FastMCP
 
-from .ssh import DOCKER_COMPOSE_DIR, q, run_ssh, validate_name
+from .config import DOCKER_COMPOSE_DIR
+from .utils import clamp, q, validate_name
+
+Runner = Callable[[str, int], Awaitable[str]]
 
 
-def require_compose_dir() -> str:
+def _require_compose_dir() -> str:
     if not DOCKER_COMPOSE_DIR:
         raise ValueError("DOCKER_COMPOSE_DIR is not configured")
     return DOCKER_COMPOSE_DIR
 
 
-def validate_service(service: str) -> str:
-    return validate_name(service, "service")
+def _optional_service_arg(service: str) -> str:
+    if not service:
+        return ""
+    validate_name(service, "service")
+    return f" {q(service)}"
 
 
-def register(mcp: FastMCP) -> None:
+def register(mcp: FastMCP, run: Runner) -> None:
     # -------------------------------------------------------------------------
     # Read-only
     # -------------------------------------------------------------------------
@@ -21,41 +29,38 @@ def register(mcp: FastMCP) -> None:
     @mcp.tool()
     async def docker_ps(all_containers: bool = False) -> str:
         """List Docker containers. Set all_containers=true to include stopped containers."""
-        return await run_ssh(
+        return await run(
             "docker ps --all --format "
             "'table {{.Names}}\\t{{.Status}}\\t{{.Image}}\\t{{.Ports}}'"
             if all_containers
             else
             "docker ps --format "
-            "'table {{.Names}}\\t{{.Status}}\\t{{.Image}}\\t{{.Ports}}'"
+            "'table {{.Names}}\\t{{.Status}}\\t{{.Image}}\\t{{.Ports}}'",
+            60,
         )
 
     @mcp.tool()
     async def docker_logs(container: str, tail: int = 100) -> str:
         """Show recent logs from a Docker container."""
         validate_name(container, "container")
-        tail = max(1, min(int(tail), 2000))
-        return await run_ssh(
-            f"docker logs --tail {tail} {q(container)} 2>&1",
-            timeout=120,
+        return await run(
+            f"docker logs --tail {clamp(tail, 1, 2000)} {q(container)} 2>&1",
+            120,
         )
 
     @mcp.tool()
     async def docker_inspect(container: str) -> str:
         """Inspect a Docker container."""
         validate_name(container, "container")
-        return await run_ssh(
-            f"docker inspect {q(container)}",
-            timeout=90,
-        )
+        return await run(f"docker inspect {q(container)}", 90)
 
     @mcp.tool()
     async def docker_stats() -> str:
         """Show current CPU, memory, network and block I/O usage of containers."""
-        return await run_ssh(
+        return await run(
             "docker stats --no-stream "
             "--format 'table {{.Name}}\\t{{.CPUPerc}}\\t{{.MemUsage}}\\t{{.MemPerc}}\\t{{.NetIO}}\\t{{.BlockIO}}'",
-            timeout=90,
+            90,
         )
 
     @mcp.tool()
@@ -71,30 +76,31 @@ def register(mcp: FastMCP) -> None:
             "Health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "
             + q(container)
         )
-        return await run_ssh(command)
+        return await run(command, 60)
 
     @mcp.tool()
     async def docker_images() -> str:
         """List Docker images."""
-        return await run_ssh(
+        return await run(
             "docker images --format "
-            "'table {{.Repository}}\\t{{.Tag}}\\t{{.ID}}\\t{{.CreatedSince}}\\t{{.Size}}'"
+            "'table {{.Repository}}\\t{{.Tag}}\\t{{.ID}}\\t{{.CreatedSince}}\\t{{.Size}}'",
+            60,
         )
 
     @mcp.tool()
     async def docker_volumes() -> str:
         """List Docker volumes."""
-        return await run_ssh("docker volume ls")
+        return await run("docker volume ls", 60)
 
     @mcp.tool()
     async def docker_networks() -> str:
         """List Docker networks."""
-        return await run_ssh("docker network ls")
+        return await run("docker network ls", 60)
 
     @mcp.tool()
     async def docker_disk_usage() -> str:
         """Show Docker disk usage."""
-        return await run_ssh("docker system df")
+        return await run("docker system df", 60)
 
     # -------------------------------------------------------------------------
     # Mutating
@@ -104,19 +110,29 @@ def register(mcp: FastMCP) -> None:
     async def docker_restart(container: str) -> str:
         """Restart a Docker container. This changes server state."""
         validate_name(container, "container")
-        return await run_ssh(f"docker restart {q(container)}")
+        return await run(f"docker restart {q(container)}", 60)
 
     @mcp.tool()
     async def docker_start(container: str) -> str:
         """Start a Docker container. This changes server state."""
         validate_name(container, "container")
-        return await run_ssh(f"docker start {q(container)}")
+        return await run(f"docker start {q(container)}", 60)
 
     @mcp.tool()
     async def docker_stop(container: str) -> str:
         """Stop a Docker container. This changes server state."""
         validate_name(container, "container")
-        return await run_ssh(f"docker stop {q(container)}")
+        return await run(f"docker stop {q(container)}", 60)
+
+    @mcp.tool()
+    async def docker_prune_images(all_unused: bool = False) -> str:
+        """Remove unused Docker images to free disk space. This changes server state.
+
+        By default removes only dangling images (untagged and not referenced by any container).
+        Set all_unused=true to also remove images that exist but are not used by any container.
+        """
+        flag = " --all" if all_unused else ""
+        return await run(f"docker image prune --force{flag}", 120)
 
     # -------------------------------------------------------------------------
     # Compose
@@ -125,62 +141,43 @@ def register(mcp: FastMCP) -> None:
     @mcp.tool()
     async def docker_compose_ps() -> str:
         """Show Docker Compose services."""
-        directory = require_compose_dir()
-        return await run_ssh(
-            f"cd {q(directory)} && docker compose ps",
-            timeout=90,
-        )
+        directory = _require_compose_dir()
+        return await run(f"cd {q(directory)} && docker compose ps", 90)
 
     @mcp.tool()
     async def docker_compose_config() -> str:
         """Render and validate the Docker Compose configuration."""
-        directory = require_compose_dir()
-        return await run_ssh(
-            f"cd {q(directory)} && docker compose config",
-            timeout=90,
-        )
+        directory = _require_compose_dir()
+        return await run(f"cd {q(directory)} && docker compose config", 90)
 
     @mcp.tool()
     async def docker_compose_logs(service: str = "", tail: int = 100) -> str:
         """Show Docker Compose logs, optionally for one service."""
-        directory = require_compose_dir()
-        tail = max(1, min(int(tail), 2000))
-        service_arg = ""
-        if service:
-            validate_service(service)
-            service_arg = f" {q(service)}"
-        return await run_ssh(
-            f"cd {q(directory)} && docker compose logs --tail {tail}{service_arg}",
-            timeout=120,
+        directory = _require_compose_dir()
+        service_arg = _optional_service_arg(service)
+        return await run(
+            f"cd {q(directory)} && docker compose logs --tail {clamp(tail, 1, 2000)}{service_arg}",
+            120,
         )
 
     @mcp.tool()
     async def docker_compose_restart(service: str = "") -> str:
         """Restart Docker Compose services. This changes server state."""
-        directory = require_compose_dir()
-        service_arg = ""
-        if service:
-            validate_service(service)
-            service_arg = f" {q(service)}"
-        return await run_ssh(
+        directory = _require_compose_dir()
+        service_arg = _optional_service_arg(service)
+        return await run(
             f"cd {q(directory)} && docker compose restart{service_arg}",
-            timeout=120,
+            120,
         )
 
     @mcp.tool()
     async def docker_compose_pull() -> str:
         """Pull Docker Compose images. This changes local Docker image state."""
-        directory = require_compose_dir()
-        return await run_ssh(
-            f"cd {q(directory)} && docker compose pull",
-            timeout=600,
-        )
+        directory = _require_compose_dir()
+        return await run(f"cd {q(directory)} && docker compose pull", 600)
 
     @mcp.tool()
     async def docker_compose_up() -> str:
         """Start/update the Docker Compose stack with detached mode. This changes server state."""
-        directory = require_compose_dir()
-        return await run_ssh(
-            f"cd {q(directory)} && docker compose up -d",
-            timeout=600,
-        )
+        directory = _require_compose_dir()
+        return await run(f"cd {q(directory)} && docker compose up -d", 600)

@@ -29,7 +29,8 @@ src/vps_docker_mcp/
 ├── server.py          # MCP instance, wires modules together
 ├── ssh.py             # SSH config, run_ssh/run_many helpers
 ├── docker.py          # Docker and Docker Compose tools
-└── infrastructure.py  # VPS diagnostics tools
+├── infrastructure.py  # VPS diagnostics tools
+└── github.py          # GitHub Actions tools
 ```
 
 ## Security model
@@ -60,6 +61,7 @@ Use a dedicated non-root SSH account, e.g. `deploy`, with Docker access.
 - Docker on VPS
 - Docker Compose v2 if Compose tools are used
 - `deploy` user with permission to run Docker
+- `gh` CLI installed and authenticated on the VPS if GitHub Actions tools are used
 
 ## Installation
 
@@ -82,6 +84,7 @@ VPS_USER=deploy
 VPS_SSH_KEY=~/.ssh/vps_mcp
 VPS_KNOWN_HOSTS=~/.ssh/known_hosts
 DOCKER_COMPOSE_DIR=/opt/news-bot
+GITHUB_REPO=acme/api
 MAX_OUTPUT_CHARS=20000
 ```
 
@@ -174,6 +177,24 @@ Mutating:
 - `docker_compose_pull`
 - `docker_compose_up`
 
+### GitHub Actions
+
+Read-only:
+
+- `gh_workflow_list` — list all workflows in a repo
+- `gh_run_list` — list recent runs, filterable by workflow, status, and limit
+- `gh_run_view` — show summary and job status for a specific run
+- `gh_run_logs` — fetch full or failed-only logs for a run
+- `gh_job_logs` — fetch logs for a single job within a run
+- `gh_diagnose_failure` — find the latest failed run and show its error logs in one call
+
+Mutating:
+
+- `gh_run_cancel` — cancel an in-progress run
+- `gh_run_rerun` — re-run a run, optionally failed jobs only
+
+All tools accept a `repo` parameter (`owner/repo`). If omitted, they fall back to the `GITHUB_REPO` env var.
+
 ### Restricted diagnostics
 
 `diagnostic_command` only permits a fixed list:
@@ -241,6 +262,31 @@ Restart news-bot if the diagnosis indicates that a restart is appropriate.
 
 The restart operation is a separate mutating tool.
 
+For a broken CI build:
+
+```text
+Why did the last build fail?
+```
+
+Claude can call:
+
+```text
+gh_diagnose_failure
+```
+
+This finds the most recent failed run and returns the failed-step logs in one call. To scope it to a specific workflow:
+
+```text
+gh_diagnose_failure(workflow="deploy.yml")
+```
+
+To browse recent runs and then dig into a specific one:
+
+```text
+gh_run_list(status="failure", limit=5)
+gh_run_logs(run_id="<id>", failed_only=True)
+```
+
 ## Important production recommendation
 
 Keep Claude Code's own permission/approval mechanism enabled for mutating operations.
@@ -262,3 +308,4 @@ Good next additions would be:
 - audit logging
 - command execution timeouts per tool
 - separate read-only and write SSH credentials
+- GitHub Actions workflow dispatch (trigger a run)

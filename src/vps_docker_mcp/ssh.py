@@ -42,6 +42,23 @@ async def run_ssh(command: str, timeout: int = 60) -> str:
     return limit_output(stdout or "(no output)", MAX_OUTPUT_CHARS)
 
 
+async def sftp_get(remote_path: str, local_path: str) -> None:
+    """Download a single file from the VPS via SFTP."""
+    known_hosts = (
+        None if not VPS_KNOWN_HOSTS
+        else os.path.expanduser(VPS_KNOWN_HOSTS)
+    )
+    async with asyncssh.connect(
+        VPS_HOST,
+        port=VPS_PORT,
+        username=VPS_USER,
+        client_keys=[VPS_SSH_KEY],
+        known_hosts=known_hosts,
+    ) as conn:
+        async with conn.start_sftp_client() as sftp:
+            await sftp.get(remote_path, local_path)
+
+
 async def run_many(commands: list[tuple[str, str]], timeout: int = 90) -> str:
     parts = []
     for title, command in commands:

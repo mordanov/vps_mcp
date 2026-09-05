@@ -3,7 +3,7 @@ from collections.abc import Awaitable, Callable
 
 from mcp.server.fastmcp import FastMCP
 
-from .config import POSTGRES_BACKUP_DIR, POSTGRES_CONTAINER
+from .config import POSTGRES_BACKUP_DIR, POSTGRES_CONTAINER, POSTGRES_USER
 from .ssh import sftp_get
 from .utils import q, validate_name
 
@@ -37,10 +37,10 @@ _TABLE_STATS_SQL = (
 )
 
 
-def _psql(container: str, database: str, sql: str) -> str:
+def _psql(container: str, user: str, database: str, sql: str) -> str:
     return (
-        f"docker exec -u postgres {q(container)} "
-        f"psql -U postgres -d {q(database)} -c {q(sql)}"
+        f"docker exec -u {q(user)} {q(container)} "
+        f"psql -U {q(user)} -d {q(database)} -c {q(sql)}"
     )
 
 
@@ -50,6 +50,7 @@ def register(mcp: FastMCP, run: Runner) -> None:
     async def postgres_backup_database(
         database: str,
         container: str = POSTGRES_CONTAINER,
+        user: str = POSTGRES_USER,
         backup_dir: str = POSTGRES_BACKUP_DIR,
     ) -> str:
         """Backup a single PostgreSQL database to a custom-format dump file.
@@ -59,11 +60,12 @@ def register(mcp: FastMCP, run: Runner) -> None:
         """
         validate_name(container, "container")
         validate_name(database, "database")
+        validate_name(user, "user")
         cmd = (
             f"set -e\n"
             f"mkdir -p {q(backup_dir)}\n"
             f"OUTFILE={q(backup_dir)}/{database}_$(date +%Y%m%d_%H%M%S).dump\n"
-            f'docker exec -u postgres {q(container)} pg_dump -Fc {q(database)} > "$OUTFILE"\n'
+            f'docker exec -u {q(user)} {q(container)} pg_dump -U {q(user)} -Fc {q(database)} > "$OUTFILE"\n'
             f'echo "Saved: $OUTFILE" && du -sh "$OUTFILE"'
         )
         return await run(cmd, 600)
@@ -71,19 +73,21 @@ def register(mcp: FastMCP, run: Runner) -> None:
     @mcp.tool()
     async def postgres_backup_all(
         container: str = POSTGRES_CONTAINER,
+        user: str = POSTGRES_USER,
         backup_dir: str = POSTGRES_BACKUP_DIR,
     ) -> str:
         """Backup all PostgreSQL databases using pg_dumpall, compressed with gzip.
 
         Creates <backup_dir>/all_databases_YYYYMMDD_HHMMSS.sql.gz on the server.
-        Restore with: gunzip -c <file> | psql -U postgres
+        Restore with: gunzip -c <file> | psql -U <user>
         """
         validate_name(container, "container")
+        validate_name(user, "user")
         cmd = (
             f"set -e\n"
             f"mkdir -p {q(backup_dir)}\n"
             f"OUTFILE={q(backup_dir)}/all_databases_$(date +%Y%m%d_%H%M%S).sql.gz\n"
-            f"docker exec -u postgres {q(container)} pg_dumpall | gzip > \"$OUTFILE\"\n"
+            f"docker exec -u {q(user)} {q(container)} pg_dumpall -U {q(user)} | gzip > \"$OUTFILE\"\n"
             f'echo "Saved: $OUTFILE" && du -sh "$OUTFILE"'
         )
         return await run(cmd, 900)
@@ -122,6 +126,7 @@ def register(mcp: FastMCP, run: Runner) -> None:
     @mcp.tool()
     async def postgres_stats(
         container: str = POSTGRES_CONTAINER,
+        user: str = POSTGRES_USER,
         database: str = "",
     ) -> str:
         """Show PostgreSQL statistics: database sizes, active queries, and optionally table stats.
@@ -129,16 +134,17 @@ def register(mcp: FastMCP, run: Runner) -> None:
         If database is specified, also shows the top 20 tables by size for that database.
         """
         validate_name(container, "container")
+        validate_name(user, "user")
         cmds = [
             "echo '=== DATABASE SIZES AND CONNECTIONS ===' && "
-            + _psql(container, "postgres", _DB_STATS_SQL),
+            + _psql(container, user, "postgres", _DB_STATS_SQL),
             "echo '=== ACTIVE QUERIES ===' && "
-            + _psql(container, "postgres", _ACTIVITY_SQL),
+            + _psql(container, user, "postgres", _ACTIVITY_SQL),
         ]
         if database:
             validate_name(database, "database")
             cmds.append(
                 f"echo '=== TOP TABLES IN {database} ===' && "
-                + _psql(container, database, _TABLE_STATS_SQL)
+                + _psql(container, user, database, _TABLE_STATS_SQL)
             )
         return await run(" && ".join(cmds), 60)

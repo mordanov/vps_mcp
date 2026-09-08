@@ -30,6 +30,7 @@ src/vps_docker_mcp/
 ├── ssh.py             # SSH config, run_ssh/run_many helpers
 ├── docker.py          # Docker and Docker Compose tools
 ├── infrastructure.py  # VPS diagnostics tools
+├── database.py        # PostgreSQL backup and stats tools
 └── github.py          # GitHub Actions tools
 ```
 
@@ -176,6 +177,21 @@ Mutating:
 - `docker_compose_restart`
 - `docker_compose_pull`
 - `docker_compose_up`
+
+### Database (PostgreSQL)
+
+Read-only:
+
+- `postgres_stats` — show database sizes, active queries, and optionally top tables by size for a specific database
+- `postgres_list_backups` — list backup files on the server, newest first
+
+Mutating:
+
+- `postgres_backup_database` — dump a single database to a custom-format `.dump` file; restore with `pg_restore`
+- `postgres_backup_all` — dump all databases via `pg_dumpall`, compressed with gzip; restore with `gunzip | psql`
+- `postgres_download_backup` — download a backup file from the server to a local directory via SFTP
+
+All tools default to the container, user, and backup directory configured in `.env` (`POSTGRES_CONTAINER`, `POSTGRES_USER`, `POSTGRES_BACKUP_DIR`).
 
 ### GitHub Actions
 

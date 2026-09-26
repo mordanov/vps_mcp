@@ -125,6 +125,11 @@ def register(mcp: FastMCP, run: Runner) -> None:
         return await run(f"docker stop {q(container)}", 60)
 
     @mcp.tool()
+    async def docker_disk_usage_verbose() -> str:
+        """Show detailed Docker disk usage with per-image and per-volume breakdown."""
+        return await run("docker system df -v", 60)
+
+    @mcp.tool()
     async def docker_prune_images(all_unused: bool = False) -> str:
         """Remove unused Docker images to free disk space. This changes server state.
 
@@ -133,6 +138,16 @@ def register(mcp: FastMCP, run: Runner) -> None:
         """
         flag = " --all" if all_unused else ""
         return await run(f"docker image prune --force{flag}", 120)
+
+    @mcp.tool()
+    async def docker_prune_builder() -> str:
+        """Remove Docker build cache. This changes server state."""
+        return await run("docker builder prune --force", 120)
+
+    @mcp.tool()
+    async def docker_prune_system() -> str:
+        """Remove all stopped containers, unused networks and dangling images. This changes server state."""
+        return await run("docker system prune --all --force", 300)
 
     # -------------------------------------------------------------------------
     # Compose

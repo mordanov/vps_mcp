@@ -121,6 +121,29 @@ ss -lntup 2>/dev/null || ss -lnt
         return await _run_many(run, commands, timeout=120)
 
     @mcp.tool()
+    async def disk_large_files(path: str = "/", min_mb: int = 100, limit: int = 20) -> str:
+        """Find the largest files on the filesystem. Stays on one filesystem (-xdev)."""
+        n = clamp(limit, 5, 100)
+        mb = clamp(min_mb, 1, 10240)
+        safe_path = q(path)
+        return await run(
+            f"find {safe_path} -xdev -type f -size +{mb}M -printf '%s\\t%p\\n' 2>/dev/null"
+            f" | sort -rn | head -{n}"
+            f" | awk '{{printf \"%.0f MB\\t%s\\n\", $1/1048576, $2}}'",
+            120,
+        )
+
+    @mcp.tool()
+    async def disk_largest_dirs(path: str = "/", depth: int = 2, limit: int = 20) -> str:
+        """Show directories consuming the most space (stays on one filesystem)."""
+        d = clamp(depth, 1, 5)
+        n = clamp(limit, 5, 100)
+        return await run(
+            f"du -hx --max-depth={d} {q(path)} 2>/dev/null | sort -rh | head -{n}",
+            120,
+        )
+
+    @mcp.tool()
     async def diagnostic_command(command: str) -> str:
         """Run one of a small predefined set of read-only diagnostic commands."""
         if command not in ALLOWED_EXEC:

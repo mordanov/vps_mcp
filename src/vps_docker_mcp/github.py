@@ -135,6 +135,38 @@ def register(mcp: FastMCP, run: Runner) -> None:
         )
 
     @mcp.tool()
+    async def gh_diagnose_last_run(
+        repo: str = "",
+        workflow: str = "",
+    ) -> str:
+        """Fetch the most recent run and show its failed-step logs.
+
+        Answers "look at the last run for <repo> and explain why it failed" in
+        one call. Unlike gh_diagnose_failure, takes the latest run regardless
+        of status — useful when you know the last run broke but don't know its
+        run_id.
+
+        repo:     owner/repo. Falls back to GITHUB_REPO env var.
+        workflow: narrow to a specific workflow filename or name (optional).
+        """
+        r = _repo(repo)
+        workflow_flag = f" --workflow {q(_workflow(workflow))}" if workflow else ""
+        command = f"""
+set -e
+run_id=$(gh run list --repo {q(r)}{workflow_flag} --limit 1 --json databaseId --jq '.[0].databaseId' 2>/dev/null)
+if [ -z "$run_id" ] || [ "$run_id" = "null" ]; then
+  echo "No runs found."
+  exit 0
+fi
+echo "===== LAST RUN SUMMARY ====="
+gh run view "$run_id" --repo {q(r)}
+echo ""
+echo "===== FAILED STEP LOGS ====="
+gh run view "$run_id" --repo {q(r)} --log-failed 2>&1 || echo "(no failed steps)"
+"""
+        return await run(command, 120)
+
+    @mcp.tool()
     async def gh_diagnose_failure(
         repo: str = "",
         workflow: str = "",

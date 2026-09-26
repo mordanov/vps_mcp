@@ -54,6 +54,22 @@ SSH host key checking is enabled through `VPS_KNOWN_HOSTS`.
 
 Use a dedicated non-root SSH account, e.g. `deploy`, with Docker access.
 
+### Credential isolation
+
+**SSH key** — The VPS SSH key path lives only in `.env` and is loaded inside `ssh.py` at connection time. Agents never see the key. Enforced via Claude Code's `permissions.deny` rules:
+
+```json
+"deny": ["Bash(ssh *)", "Bash(scp *)", "Bash(sftp *)", "Bash(rsync *)"]
+```
+
+**GitHub token** — The `gh` CLI is authenticated on the VPS. All GitHub operations run over SSH through this MCP server. Agents cannot call `gh` directly. Enforced via:
+
+```json
+"deny": ["Bash(gh *)"]
+```
+
+Add both deny rules to `~/.claude/settings.json` to lock down access.
+
 ## Requirements
 
 - Python 3.11+
@@ -202,7 +218,8 @@ Read-only:
 - `gh_run_view` — show summary and job status for a specific run
 - `gh_run_logs` — fetch full or failed-only logs for a run
 - `gh_job_logs` — fetch logs for a single job within a run
-- `gh_diagnose_failure` — find the latest failed run and show its error logs in one call
+- `gh_diagnose_last_run` — fetch the most recent run (any status) and show its failed-step logs; answers "why did the last run fail?" in one call
+- `gh_diagnose_failure` — find the latest *failed* run and show its error logs in one call
 
 Mutating:
 
@@ -302,6 +319,43 @@ To browse recent runs and then dig into a specific one:
 gh_run_list(status="failure", limit=5)
 gh_run_logs(run_id="<id>", failed_only=True)
 ```
+
+## Development
+
+### Setup
+
+```bash
+uv sync
+uv pip install -e ".[dev]"
+```
+
+### Tests
+
+```bash
+pytest
+```
+
+77 tests cover all modules: utils, github, docker, infrastructure, database, and ssh. Tests use a `FakeMCP` helper that captures registered tool closures without starting a real MCP server. `asyncssh.connect` is mocked so SSH tests run without a real host.
+
+### Lint and type check
+
+```bash
+ruff check src tests
+ruff format src tests
+mypy src/vps_docker_mcp
+```
+
+### Pre-commit
+
+```bash
+pre-commit install
+```
+
+Runs `ruff check --fix` and `ruff format` on every commit.
+
+### CI
+
+GitHub Actions runs on every push to `main` and on pull requests: checkout → install → ruff → mypy → pytest.
 
 ## Important production recommendation
 

@@ -111,7 +111,7 @@ async def test_gh_run_logs_failed_only():
     register(mcp, runner)
     await mcp.tools["gh_run_logs"](repo="owner/repo", run_id="123", failed_only=True)
     cmd = runner.call_args[0][0]
-    assert "--log-failed" in cmd or "--log --failed" in cmd or "--log-failed" in cmd
+    assert "--log-failed" in cmd
 
 
 @pytest.mark.asyncio

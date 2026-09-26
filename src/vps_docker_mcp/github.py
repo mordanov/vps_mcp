@@ -113,9 +113,9 @@ def register(mcp: FastMCP, run: Runner) -> None:
         r = _repo(repo)
         if not run_id.strip():
             raise ValueError("run_id is required")
-        flag = " --failed" if failed_only else ""
+        log_flag = "--log-failed" if failed_only else "--log"
         return await run(
-            f"gh run view {q(_run_id(run_id))} --repo {q(r)} --log{flag}",
+            f"gh run view {q(_run_id(run_id))} --repo {q(r)} {log_flag}",
             120,
         )
 

@@ -14,11 +14,14 @@ from .config import (
 from .utils import limit_output
 
 
+def _to_str(val: bytes | str | None) -> str:
+    if not val:
+        return ""
+    return val.decode() if isinstance(val, bytes) else val
+
+
 async def run_ssh(command: str, timeout: int = 60) -> str:
-    known_hosts = (
-        None if not VPS_KNOWN_HOSTS
-        else os.path.expanduser(VPS_KNOWN_HOSTS)
-    )
+    known_hosts = None if not VPS_KNOWN_HOSTS else os.path.expanduser(VPS_KNOWN_HOSTS)
 
     async with asyncssh.connect(
         VPS_HOST,
@@ -32,8 +35,8 @@ async def run_ssh(command: str, timeout: int = 60) -> str:
             timeout=timeout,
         )
 
-    stdout = result.stdout.strip()
-    stderr = result.stderr.strip()
+    stdout = _to_str(result.stdout).strip()
+    stderr = _to_str(result.stderr).strip()
 
     if result.exit_status != 0:
         text = stderr or stdout or "command failed"
@@ -44,10 +47,7 @@ async def run_ssh(command: str, timeout: int = 60) -> str:
 
 async def sftp_get(remote_path: str, local_path: str) -> None:
     """Download a single file from the VPS via SFTP."""
-    known_hosts = (
-        None if not VPS_KNOWN_HOSTS
-        else os.path.expanduser(VPS_KNOWN_HOSTS)
-    )
+    known_hosts = None if not VPS_KNOWN_HOSTS else os.path.expanduser(VPS_KNOWN_HOSTS)
     async with asyncssh.connect(
         VPS_HOST,
         port=VPS_PORT,

@@ -2,7 +2,7 @@ from collections.abc import Awaitable, Callable
 
 from mcp.server.fastmcp import FastMCP
 
-from .utils import clamp, q, validate_name
+from .utils import clamp, q
 
 Runner = Callable[[str, int], Awaitable[str]]
 
@@ -72,8 +72,7 @@ df -ih
         """Show processes consuming the most CPU and memory."""
         n = clamp(limit, 5, 50)
         return await run(
-            f"ps -eo pid,ppid,user,%cpu,%mem,rss,stat,etime,comm "
-            f"--sort=-%cpu | head -n {n + 1}",
+            f"ps -eo pid,ppid,user,%cpu,%mem,rss,stat,etime,comm --sort=-%cpu | head -n {n + 1}",
             60,
         )
 
@@ -114,8 +113,16 @@ ss -lntup 2>/dev/null || ss -lnt
             ("DISK", "df -hT /; df -ih /"),
             ("TOP CPU", "ps -eo pid,%cpu,%mem,rss,stat,comm --sort=-%cpu | head -n 11"),
             ("SYSTEMD FAILED", "systemctl --failed --no-pager 2>/dev/null || true"),
-            ("DOCKER", "docker info --format 'ServerVersion={{.ServerVersion}} Containers={{.Containers}} Running={{.ContainersRunning}} Images={{.Images}}' 2>&1"),
-            ("DOCKER CONTAINERS", "docker ps -a --format 'table {{.Names}}\\t{{.Status}}\\t{{.Image}}'"),
+            (
+                "DOCKER",
+                "docker info --format "
+                "'ServerVersion={{.ServerVersion}} Containers={{.Containers}}"
+                " Running={{.ContainersRunning}} Images={{.Images}}' 2>&1",
+            ),
+            (
+                "DOCKER CONTAINERS",
+                "docker ps -a --format 'table {{.Names}}\\t{{.Status}}\\t{{.Image}}'",
+            ),
             ("DOCKER DISK", "docker system df"),
         ]
         return await _run_many(run, commands, timeout=120)

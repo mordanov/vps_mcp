@@ -38,10 +38,7 @@ _TABLE_STATS_SQL = (
 
 
 def _psql(container: str, user: str, database: str, sql: str) -> str:
-    return (
-        f"docker exec -u {q(user)} {q(container)} "
-        f"psql -U {q(user)} -d {q(database)} -c {q(sql)}"
-    )
+    return f"docker exec -u {q(user)} {q(container)} psql -U {q(user)} -d {q(database)} -c {q(sql)}"
 
 
 def register(mcp: FastMCP, run: Runner) -> None:
@@ -87,7 +84,7 @@ def register(mcp: FastMCP, run: Runner) -> None:
             f"set -e\n"
             f"mkdir -p {q(backup_dir)}\n"
             f"OUTFILE={q(backup_dir)}/all_databases_$(date +%Y%m%d_%H%M%S).sql.gz\n"
-            f"docker exec -u {q(user)} {q(container)} pg_dumpall -U {q(user)} | gzip > \"$OUTFILE\"\n"
+            f'docker exec -u {q(user)} {q(container)} pg_dumpall -U {q(user)} | gzip > "$OUTFILE"\n'
             f'echo "Saved: $OUTFILE" && du -sh "$OUTFILE"'
         )
         return await run(cmd, 900)
@@ -136,15 +133,12 @@ def register(mcp: FastMCP, run: Runner) -> None:
         validate_name(container, "container")
         validate_name(user, "user")
         cmds = [
-            "echo '=== DATABASE SIZES AND CONNECTIONS ===' && "
-            + _psql(container, user, "postgres", _DB_STATS_SQL),
-            "echo '=== ACTIVE QUERIES ===' && "
-            + _psql(container, user, "postgres", _ACTIVITY_SQL),
+            "echo '=== DATABASE SIZES AND CONNECTIONS ===' && " + _psql(container, user, "postgres", _DB_STATS_SQL),
+            "echo '=== ACTIVE QUERIES ===' && " + _psql(container, user, "postgres", _ACTIVITY_SQL),
         ]
         if database:
             validate_name(database, "database")
             cmds.append(
-                f"echo '=== TOP TABLES IN {database} ===' && "
-                + _psql(container, user, database, _TABLE_STATS_SQL)
+                f"echo '=== TOP TABLES IN {database} ===' && " + _psql(container, user, database, _TABLE_STATS_SQL)
             )
         return await run(" && ".join(cmds), 60)

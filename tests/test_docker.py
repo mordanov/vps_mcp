@@ -96,6 +96,7 @@ async def test_docker_compose_ps_requires_dir():
     runner = make_runner()
     # DOCKER_COMPOSE_DIR defaults to empty string in test env
     import vps_docker_mcp.docker as docker_mod
+
     original = docker_mod.DOCKER_COMPOSE_DIR
     docker_mod.DOCKER_COMPOSE_DIR = ""
     try:
@@ -109,6 +110,7 @@ async def test_docker_compose_ps_requires_dir():
 @pytest.mark.asyncio
 async def test_docker_compose_logs_clamps_tail(monkeypatch):
     import vps_docker_mcp.docker as docker_mod
+
     monkeypatch.setattr(docker_mod, "DOCKER_COMPOSE_DIR", "/app")
     mcp = FakeMCP()
     runner = make_runner()

@@ -30,12 +30,9 @@ def register(mcp: FastMCP, run: Runner) -> None:
     async def docker_ps(all_containers: bool = False) -> str:
         """List Docker containers. Set all_containers=true to include stopped containers."""
         return await run(
-            "docker ps --all --format "
-            "'table {{.Names}}\\t{{.Status}}\\t{{.Image}}\\t{{.Ports}}'"
+            "docker ps --all --format 'table {{.Names}}\\t{{.Status}}\\t{{.Image}}\\t{{.Ports}}'"
             if all_containers
-            else
-            "docker ps --format "
-            "'table {{.Names}}\\t{{.Status}}\\t{{.Image}}\\t{{.Ports}}'",
+            else "docker ps --format 'table {{.Names}}\\t{{.Status}}\\t{{.Image}}\\t{{.Ports}}'",
             60,
         )
 
@@ -73,8 +70,7 @@ def register(mcp: FastMCP, run: Runner) -> None:
             "Running={{.State.Running}} ExitCode={{.State.ExitCode}} "
             "RestartCount={{.RestartCount}} "
             "Started={{.State.StartedAt}} Finished={{.State.FinishedAt}} "
-            "Health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "
-            + q(container)
+            "Health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' " + q(container)
         )
         return await run(command, 60)
 
@@ -82,8 +78,7 @@ def register(mcp: FastMCP, run: Runner) -> None:
     async def docker_images() -> str:
         """List Docker images."""
         return await run(
-            "docker images --format "
-            "'table {{.Repository}}\\t{{.Tag}}\\t{{.ID}}\\t{{.CreatedSince}}\\t{{.Size}}'",
+            "docker images --format 'table {{.Repository}}\\t{{.Tag}}\\t{{.ID}}\\t{{.CreatedSince}}\\t{{.Size}}'",
             60,
         )
 

@@ -68,8 +68,14 @@ def register(mcp: FastMCP, run: Runner) -> None:
         if workflow:
             args += f" --workflow {q(_workflow(workflow))}"
         valid_statuses = {
-            "queued", "in_progress", "completed", "failure",
-            "success", "cancelled", "skipped", "waiting",
+            "queued",
+            "in_progress",
+            "completed",
+            "failure",
+            "success",
+            "cancelled",
+            "skipped",
+            "waiting",
         }
         if status:
             if status not in valid_statuses:
@@ -183,7 +189,8 @@ gh run view "$run_id" --repo {q(r)} --log-failed 2>&1 || echo "(no failed steps)
         workflow_flag = f" --workflow {q(_workflow(workflow))}" if workflow else ""
         command = f"""
 set -e
-run_id=$(gh run list --repo {q(r)}{workflow_flag} --status failure --limit 1 --json databaseId --jq '.[0].databaseId' 2>/dev/null)
+run_id=$(gh run list --repo {q(r)}{workflow_flag} --status failure \
+  --limit 1 --json databaseId --jq '.[0].databaseId' 2>/dev/null)
 if [ -z "$run_id" ] || [ "$run_id" = "null" ]; then
   echo "No failed runs found."
   exit 0
